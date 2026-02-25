@@ -42,8 +42,17 @@ function salvarProdutos(produtos) {
 
 /* ================= REGISTRAR SLASH ================= */
 
-client.once("ready", async () => {
-  console.log(`Bot online como ${client.user.tag}`);
+client.once('ready', () => {
+
+  client.user.setActivity(
+    "Nitros, streamings e robux com sorteios toda a semana!",
+    {
+      type: 1,
+      url: "https://twitch.tv/SEU_CANAL"
+    }
+  );
+
+});
 
   const commands = [
     new SlashCommandBuilder()
