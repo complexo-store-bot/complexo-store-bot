@@ -1,0 +1,26 @@
+{
+  "nitro": {
+    "nome": "Nitro 1 Mês",
+    "preco": 25,
+    "estoque": [
+      "email1:senha1",
+      "email2:senha2"
+    ]
+  },
+  "robux": {
+    "nome": "800 Robux",
+    "preco": 15,
+    "estoque": [
+      "conta1@email.com:senha123",
+      "conta2@email.com:senha456"
+    ]
+  },
+  "netflix": {
+    "nome": "Netflix 1 Tela",
+    "preco": 12,
+    "estoque": [
+      "login1@email.com:senha",
+      "login2@email.com:senha"
+    ]
+  }
+}
