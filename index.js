@@ -7,7 +7,10 @@ const {
   ButtonBuilder,
   ButtonStyle,
   Events,
-  StringSelectMenuBuilder
+  StringSelectMenuBuilder,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
 
 const express = require("express");
@@ -23,7 +26,6 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers
   ]
 });
@@ -38,82 +40,122 @@ function salvarProdutos(produtos) {
   fs.writeFileSync(produtosPath, JSON.stringify(produtos, null, 2));
 }
 
-client.once("ready", () => {
+/* ================= REGISTRAR SLASH ================= */
+
+client.once("ready", async () => {
   console.log(`Bot online como ${client.user.tag}`);
-});
 
-/* ================= COMANDOS ================= */
+  const commands = [
+    new SlashCommandBuilder()
+      .setName("ping")
+      .setDescription("Verifica se o bot está online"),
 
-client.on("messageCreate", async (message) => {
-  if (!message.member.permissions.has("Administrator")) return;
+    new SlashCommandBuilder()
+      .setName("painelticket")
+      .setDescription("Cria painel de ticket"),
 
-  // PAINEL TICKET
-  if (message.content === "!painelticket") {
+    new SlashCommandBuilder()
+      .setName("painelvendas")
+      .setDescription("Cria painel da loja"),
 
-    if (message.channel.name !== "📫・tickets")
-      return message.reply("Use no canal 📫・tickets.");
+    new SlashCommandBuilder()
+      .setName("estoque")
+      .setDescription("Ver estoque (Admin)")
+  ].map(cmd => cmd.toJSON());
 
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId("abrir_ticket")
-      .setPlaceholder("Selecione o tipo de atendimento")
-      .addOptions([
-        { label: "Compra", value: "compra", emoji: "🛒" },
-        { label: "Suporte", value: "suporte", emoji: "🎫" },
-        { label: "Parceria", value: "parceria", emoji: "🤝" }
-      ]);
+  const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN);
 
-    const row = new ActionRowBuilder().addComponents(menu);
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands }
+  );
 
-    const painel = await message.channel.send({
-      embeds: [{
-        title: "🎟️ Central de Atendimento",
-        description: "Selecione abaixo o tipo de atendimento.",
-        color: 0x2b2d31
-      }],
-      components: [row]
-    });
-
-    await painel.pin();
-    message.delete();
-  }
-
-  // PAINEL LOJA
-  if (message.content === "!painelvendas") {
-
-    const produtos = carregarProdutos();
-
-    const menu = new StringSelectMenuBuilder()
-      .setCustomId("comprar_produto")
-      .setPlaceholder("Selecione o produto");
-
-    Object.keys(produtos).forEach(key => {
-      const p = produtos[key];
-      menu.addOptions({
-        label: `${p.nome} - R$${p.preco}`,
-        description: p.estoque.length > 0 ? `Estoque: ${p.estoque.length}` : "❌ Esgotado",
-        value: key,
-        emoji: "🛍️"
-      });
-    });
-
-    const row = new ActionRowBuilder().addComponents(menu);
-
-    message.channel.send({
-      embeds: [{
-        title: "🛒 Loja Oficial",
-        description: "Selecione o produto para comprar via PIX.",
-        color: 0x00ff99
-      }],
-      components: [row]
-    });
-  }
+  console.log("Slash commands registrados.");
 });
 
 /* ================= INTERAÇÕES ================= */
 
 client.on(Events.InteractionCreate, async (interaction) => {
 
-  // ===== ABRIR TICKET =====
+  if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu() && !interaction.isButton()) return;
+
+  /* ===== SLASH COMMANDS ===== */
+
+  if (interaction.isChatInputCommand()) {
+
+    if (interaction.commandName === "ping")
+      return interaction.reply("🏓 Pong! Bot online.");
+
+    if (interaction.commandName === "painelticket") {
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("abrir_ticket")
+        .setPlaceholder("Selecione o tipo")
+        .addOptions([
+          { label: "Compra", value: "compra", emoji: "🛒" },
+          { label: "Suporte", value: "suporte", emoji: "🎫" },
+          { label: "Parceria", value: "parceria", emoji: "🤝" }
+        ]);
+
+      const row = new ActionRowBuilder().addComponents(menu);
+
+      await interaction.reply({
+        embeds: [{
+          title: "🎟️ Central de Atendimento",
+          description: "Escolha abaixo.",
+          color: 0x2b2d31
+        }],
+        components: [row]
+      });
+    }
+
+    if (interaction.commandName === "painelvendas") {
+
+      const produtos = carregarProdutos();
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("comprar_produto")
+        .setPlaceholder("Selecione o produto");
+
+      Object.keys(produtos).forEach(key => {
+        const p = produtos[key];
+        menu.addOptions({
+          label: `${p.nome} - R$${p.preco}`,
+          description: p.estoque.length > 0 ? `Estoque: ${p.estoque.length}` : "❌ Esgotado",
+          value: key
+        });
+      });
+
+      const row = new ActionRowBuilder().addComponents(menu);
+
+      await interaction.reply({
+        embeds: [{
+          title: "🛒 Loja Oficial",
+          description: "Pagamento via PIX",
+          color: 0x00ff99
+        }],
+        components: [row]
+      });
+    }
+
+    if (interaction.commandName === "estoque") {
+
+      if (!interaction.member.permissions.has("Administrator"))
+        return interaction.reply({ content: "Apenas admin.", ephemeral: true });
+
+      const produtos = carregarProdutos();
+      let texto = "📦 Estoque Atual:\n\n";
+
+      Object.keys(produtos).forEach(key => {
+        texto += `${produtos[key].nome}: ${produtos[key].estoque.length}\n`;
+      });
+
+      return interaction.reply({ content: texto, ephemeral: true });
+    }
+  }
+
+  /* ===== ABRIR TICKET ===== */
+
   if (interaction.isStringSelectMenu() && interaction.customId === "abrir_ticket") {
 
     await interaction.deferReply({ ephemeral: true });
@@ -122,13 +164,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       c => c.name === "⎯TICKET SUPPORT" && c.type === ChannelType.GuildCategory
     );
 
-    if (!categoria)
-      return interaction.editReply({ content: "Categoria ⎯TICKET SUPPORT não encontrada." });
-
     const canal = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.username}`,
       type: ChannelType.GuildText,
-      parent: categoria.id,
+      parent: categoria?.id,
       permissionOverwrites: [
         { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
         {
@@ -141,7 +180,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
     interaction.editReply({ content: `✅ Ticket criado: ${canal}` });
   }
 
-  // ===== COMPRA VIA PIX =====
+  /* ===== COMPRA PIX ===== */
+
   if (interaction.isStringSelectMenu() && interaction.customId === "comprar_produto") {
 
     await interaction.deferReply({ ephemeral: true });
@@ -172,15 +212,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     const confirmar = new ButtonBuilder()
       .setCustomId(`confirmar_${key}`)
-      .setLabel("✅ Confirmar Pagamento (Admin)")
+      .setLabel("✅ Confirmar (Admin)")
       .setStyle(ButtonStyle.Success);
 
-    const cancelar = new ButtonBuilder()
-      .setCustomId("cancelar_compra")
-      .setLabel("❌ Cancelar")
-      .setStyle(ButtonStyle.Danger);
-
-    const row = new ActionRowBuilder().addComponents(confirmar, cancelar);
+    const row = new ActionRowBuilder().addComponents(confirmar);
 
     await canal.send({
       content:
@@ -190,19 +225,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 💳 Chave PIX:
 ${CHAVE_PIX}
 
-Envie o comprovante no chat.
-Após verificar, um admin confirmará.`,
+Envie comprovante e aguarde confirmação.`,
       components: [row]
     });
 
     interaction.editReply({ content: `🧾 Canal criado: ${canal}` });
   }
 
-  // ===== CONFIRMAR PAGAMENTO =====
+  /* ===== CONFIRMAR ===== */
+
   if (interaction.isButton() && interaction.customId.startsWith("confirmar_")) {
 
     if (!interaction.member.permissions.has("Administrator"))
-      return interaction.reply({ content: "Apenas admins confirmam.", ephemeral: true });
+      return interaction.reply({ content: "Apenas admin.", ephemeral: true });
 
     const key = interaction.customId.replace("confirmar_", "");
     const produtos = carregarProdutos();
@@ -219,26 +254,10 @@ Após verificar, um admin confirmará.`,
 
     if (userId) {
       const membro = await interaction.guild.members.fetch(userId);
-      await membro.send(
-`✅ Pagamento confirmado!
-
-📦 Produto: ${produto.nome}
-🔑 Entrega:
-${item}`
-      );
+      await membro.send(`✅ Pagamento confirmado!\n\n${produto.nome}\n\n${item}`);
     }
 
-    const logs = interaction.guild.channels.cache.find(c => c.name === "logs-vendas");
-    if (logs)
-      logs.send(`💰 Venda confirmada | ${produto.nome} | Canal: ${interaction.channel.name}`);
-
-    await interaction.reply({ content: "✅ Produto entregue!", ephemeral: true });
-  }
-
-  // ===== CANCELAR =====
-  if (interaction.isButton() && interaction.customId === "cancelar_compra") {
-    await interaction.reply({ content: "❌ Compra cancelada.", ephemeral: true });
-    setTimeout(() => interaction.channel.delete(), 3000);
+    await interaction.reply({ content: "Produto entregue!", ephemeral: true });
   }
 
 });
