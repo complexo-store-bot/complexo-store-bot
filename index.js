@@ -1,4 +1,3 @@
-
 const {
   Client,
   GatewayIntentBits,
@@ -33,13 +32,19 @@ client.once("ready", () => {
   console.log(`Bot logado como ${client.user.tag}`);
 });
 
-// ================= PAINEL ADMIN =================
+// ================= PAINEL FIXO =================
 
 client.on("messageCreate", async (message) => {
 
   if (!message.member.permissions.has("Administrator")) return;
 
   if (message.content === "!painelticket") {
+
+    const canalPermitido = "📫・tickets";
+
+    if (message.channel.name !== canalPermitido) {
+      return message.reply("Use esse comando no canal 📫・tickets.");
+    }
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("select_ticket")
@@ -55,7 +60,7 @@ client.on("messageCreate", async (message) => {
     const painel = await message.channel.send({
       embeds: [{
         title: "🎟️ Central de Atendimento",
-        description: "Escolha abaixo o tipo de atendimento que deseja.",
+        description: "Escolha abaixo o tipo de atendimento.",
         color: 0x2b2d31
       }],
       components: [row]
@@ -92,15 +97,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
     const categoria = interaction.guild.channels.cache.find(
-      c => c.name === "⎯TICKET SUPPORT" && c.type === ChannelType.GuildCategory
+      c => c.name === "TICKETS" && c.type === ChannelType.GuildCategory
     );
+
+    if (!categoria) {
+      return interaction.editReply({ content: "Categoria TICKETS não encontrada." });
+    }
 
     const tipo = interaction.values[0];
 
     const canal = await interaction.guild.channels.create({
       name: `${tipo}-${interaction.user.username}`,
       type: ChannelType.GuildText,
-      parent: categoria?.id,
+      parent: categoria.id,
       permissionOverwrites: [
         {
           id: interaction.guild.id,
@@ -140,6 +149,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
     const mensagens = await interaction.channel.messages.fetch({ limit: 100 });
+
     const transcript = mensagens
       .reverse()
       .map(m => `<p><strong>${m.author.tag}:</strong> ${m.content}</p>`)
